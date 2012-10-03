@@ -12,20 +12,52 @@
             <a class="brand" href="#">네이버에서 부동산 데이터 검색해 보기</a>
        </div>
     </div>
-</div><div class="container">
+</div>
+<div class="container">
     <div class="hero-unit">
         <h2>내 입맛에 맞는 부동산은?</h2>
         <p>부동산 매물을 합리적으로 비교 분석하여 즐겁게 삽시다!</p>
-        <p><a class="btn btn-primary" href="#">뭐가 있나요?</a></p>
+        <p>
+        <form class="form-search">
+            <div class="input-append">
+                <input type="text" class="span2 search-query" ng-model='cortarNo' ng-disabled="processing">
+                <button type="submit" class="btn btn-primary" ng-click="fetch()" ng-disabled="processing">뭐가 있나요?</button>
+            </div>
+        </form>
+        </p>
     </div>
-    <div class="row">
+    <div class="row" ng-show='processing'>
         <div class="span4">
-            <h2>hello</h2>
-            <p>{{uri}}</p>
+            <h2>열심히 찾고 있어요!</h2>
+            <p>{{uri()}}</p>
         </div>
     </div>
-    <div class="target"></div>
-    <button class="btn btn-danger" ng-click='fetch()'>질러!</button>
+    <div class="row" ng-show="data != undefined">
+        <div class="span4">
+            <h2>결과입니다!</h2>
+            <table class="table table-hover">
+                <thead>
+                <th>
+                <th>매매</th>
+                <th>전세</th>
+                <th>월세(보증금)</th>
+                <th>월세</th>
+                </th>
+                </thead>
+                <tbody>
+                <tr ng-repeat="x in data">
+                    <td>{{x.name}}</td>
+                    <td>{{x.data.A1[0] | number}}</td>
+                    <td>{{x.data.B1[0] | number}}</td>
+                    <td>{{x.data.B2[0] | number}}</td>
+                    <td>{{x.data.B2[1] | number}}</td>
+                </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+
 </div>
 
 <hr>
@@ -36,9 +68,20 @@
 
 <script type="text/javascript">
     function NaverLandCtrl($scope) {
-        $scope.uri = "http://land.naver.com/article/divisionArticleList.nhn?rletTypeCd=A01&tradeTypeCd=&hscpTypeCd=&cortarNo=1168000000&articleOrderCode=&location=379";
+        $scope.cortarNo = 1171010900
+        $scope.uri = function() {
+            return 'http://localhost:8080/apartment/' + $scope.cortarNo
+        }
+        $scope.processing = false
+        $scope.data = undefined
         $scope.fetch = function() {
-
+            $scope.processing = true
+            $.getJSON($scope.uri()).success(function(data){
+                console.log(data);
+                $scope.processing = false
+                $scope.data = data
+                $scope.$apply();
+            })
         }
     }
 </script>
