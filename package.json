@@ -1,0 +1,12 @@
+{
+    "name":"naverLand",
+    "version":"0.0.1",
+    "private":true,
+    "scripts":{
+        "start":"coffee test.coffee server"
+    },
+    "dependencies":{
+        "coffee-script":">=1.1.3",
+        "socket.io":">=0.8.7"
+    }
+}
