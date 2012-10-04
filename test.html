@@ -13,11 +13,25 @@
        </div>
     </div>
 </div>
+<div class="modal hide fade" id="modal-dialog">
+    <div class="modal-header">
+        <a href="#" class="close">x</a>
+        <h2>열심히 찾고 있어요!</h2>
+    </div>
+    <div class="modal-body center" style="text-align: center;">
+        <img src="http://www.drivetravel.com/images/searching.gif" alt="loading">
+    </div>
+    <div class="modal-footer"></div>
+</div>
 <div class="container">
     <div class="hero-unit">
         <h2>내 입맛에 맞는 부동산은?</h2>
         <p>부동산 매물을 합리적으로 비교 분석하여 즐겁게 삽시다!</p>
         <p>
+
+        <select class="" ng-model="l1" ng-options="x.value as x.name for x in loc1"></select>
+        <select ng-model="l2" ng-options="x.value as x.name for x in loc2"></select>
+        <select ng-model="l3" ng-options="x.value as x.name for x in loc3"></select>
         <form class="form-search">
             <div class="input-append">
                 <input type="text" class="span2 search-query" ng-model='cortarNo' ng-disabled="processing">
@@ -26,31 +40,30 @@
         </form>
         </p>
     </div>
-    <div class="row" ng-show='processing'>
-        <div class="span4">
-            <h2>열심히 찾고 있어요!</h2>
-            <p>{{uri()}}</p>
-        </div>
-    </div>
+
     <div class="row" ng-show="data != undefined">
         <div class="span4">
             <h2>결과입니다!</h2>
             <table class="table table-hover">
                 <thead>
                 <th>
+                <th>면적</th>
                 <th>매매</th>
                 <th>전세</th>
                 <th>월세(보증금)</th>
                 <th>월세</th>
+                <th>ROI</th>
                 </th>
                 </thead>
                 <tbody>
                 <tr ng-repeat="x in data">
-                    <td>{{x.name}}</td>
-                    <td>{{x.data.A1[0] | number}}</td>
-                    <td>{{x.data.B1[0] | number}}</td>
+                    <td>{{x.data.name}}</td>
+                    <td>{{x.data.size}}</td>
+                    <td>{{x.data.A1 | number}}</td>
+                    <td>{{x.data.B1 | number}}</td>
                     <td>{{x.data.B2[0] | number}}</td>
                     <td>{{x.data.B2[1] | number}}</td>
+                    <td ng-show="x.data.rentalInterest">{{(x.data.rentalInterest*100).toFixed(2)}}%</td>
                 </tr>
                 </tbody>
             </table>
@@ -67,21 +80,52 @@
 </footer>
 
 <script type="text/javascript">
-    function NaverLandCtrl($scope) {
+    function NaverLandCtrl($scope,$http) {
         $scope.cortarNo = 1171010900
+        $scope.loc1 = []
+        $scope.loc2 = []
+        $scope.loc3 = []
+
+        $http.get('/cortar/1100000000/1')
+                .success(function(data){
+                    $scope.loc1 = data
+                    $scope.l1 = data[0].value
+                })
+        $scope.$watch('l1',function() {
+            $http.get('/cortar/'+$scope.l1+'/2')
+                    .success(function(data){
+                        $scope.loc2 = data
+                        $scope.loc2.push({value:$scope.l1,name:"전체"})
+                        $scope.l2 = data[0].value
+                    })
+        })
+        $scope.$watch('l2',function() {
+            $http.get('/cortar/'+$scope.l2+'/3')
+                    .success(function(data){
+                        $scope.loc3 = data
+                        $scope.loc3.push({value:$scope.l2,name:"전체"})
+                        $scope.l3 = $scope.l2
+                    })
+        })
+        $scope.$watch('l3',function(){
+            $scope.cortarNo = $scope.l3
+        })
         $scope.uri = function() {
-            return 'http://localhost:8080/apartment/' + $scope.cortarNo
+            return '/apt/' + $scope.cortarNo
         }
         $scope.processing = false
         $scope.data = undefined
         $scope.fetch = function() {
+            $('#modal-dialog').modal('show')
             $scope.processing = true
-            $.getJSON($scope.uri()).success(function(data){
-                console.log(data);
-                $scope.processing = false
-                $scope.data = data
-                $scope.$apply();
-            })
+            $scope.data = undefined
+            $http.get($scope.uri())
+                    .success(function(data){
+                        console.log(data);
+                        $scope.processing = false
+                        $scope.data = data
+                        $('#modal-dialog').modal('hide')
+                    })
         }
     }
 </script>
