@@ -3,6 +3,39 @@ cheerio = require 'cheerio'
 restify = require 'restify'
 connect = require 'connect'
 
+class Ticket
+  constructor: (@parent,@id) ->
+    @count = 0
+    @stat = {}
+  ref: ->
+    @count += 1
+    #console.log("ticket ref #{@id} has #{@count}")
+  unref: ->
+    @count -= 1
+    #console.log("ticket unref #{@id} has #{@count}")
+    if (@count == 0)
+      @parent.delete(@id)
+  kill: ->
+    @pendingKill = true
+    #console.log("ticket #{@id} killed")
+
+class Tickets
+  constructor: ->
+    @active = {}
+    @next = 1
+  create: () ->
+    r = new Ticket(this,@next)
+    @active[@next] = r
+    @next += 1
+    #console.log "ticket created #{r.id}"
+    r
+  delete: (id) ->
+    #console.log("ticket destroyed #{id}")
+    delete @active[id]
+  find: (id) ->
+    #console.log "tickets find #{id} -> #{@active[id]}"
+    @active[id]
+
 naverApiUri = (cortarNo) ->
   uri = "http://land.naver.com/article/"
   if cortarNo % 100000000 == 0
@@ -14,9 +47,18 @@ naverApiUri = (cortarNo) ->
   uri += ".nhn"
   uri
 
-fetchArticles = (input) ->
+fetchArticles = (ticket,input) ->
   options = input.options
   callback = input.callback
+
+  if ticket.pendingKill
+    #console.log('early out because of expired ticket')
+    callback
+      input : input
+      articles : []
+    return
+
+  ticket.ref()
 
   rletTypeCd =
     A01 : '아파트'
@@ -95,6 +137,8 @@ fetchArticles = (input) ->
       lastPage : lastPage
       hasMore : hasMore
 
+    ticket.unref()
+
 
 class Article
   constructor : (@name,@size) ->
@@ -124,11 +168,11 @@ class Article
 
     result
 
-test = (options,next) ->
+test = (ticket,options,next) ->
   h = {}
   inProgress = 1
-  fetchArticles
-    fetchAll : true,
+  fetchArticles ticket,
+    fetchAll : true
     options : options
     callback :
       (result) ->
@@ -136,6 +180,8 @@ test = (options,next) ->
           hashTag = a.name + "/" + a.size
           if h[hashTag] == undefined
             h[hashTag] = new Article(a.name,a.size)
+            ticket.stat.articles ?= 0
+            ticket.stat.articles += 1
           o = h[hashTag]
           if (o[a.deal] == undefined) then o[a.deal] = []
           o[a.deal].push a
@@ -152,14 +198,14 @@ test = (options,next) ->
             # 마지막 페이지만 나머지를 모조리 갖고 올 자격이 있다!
             fetchAll = (page == result.lastPage and result.hasMore)
             # go go go!
-            fetchArticles
+            fetchArticles ticket,
               fetchAll : fetchAll
               options : result.input.options
               callback : result.input.callback
 
         inProgress -= 1
 
-        console.log 'inProgress:', inProgress
+        ticket.stat.workers = inProgress
 
         if (inProgress == 0)
           next(h)
@@ -177,7 +223,8 @@ divisionList = (cortarNo,index,next) ->
 
 switch process.argv[2]
   when 'test'
-    test
+    tickets = new Tickets()
+    test tickets.create(),
       rletTypeCd : '아파트'
       hsehCnt : 1000
       cortarNo : 1168000000,#1171010900,#1171011400,
@@ -190,6 +237,8 @@ switch process.argv[2]
       console.log(result)
     break
   when 'server'
+    tickets = new Tickets()
+    cache = {}
     respond = (req,res,next) ->
       res.send 'hello' + req.params.cortarNo
 
@@ -200,12 +249,19 @@ switch process.argv[2]
     server.use restify.queryParser()
     server.use restify.bodyParser()
 
+    # 기본 redirect
+    server.get '/', (req,res,next) ->
+      res.writeHead 302, Location:'/docs/test.html'
+      res.end()
+      next()
+
+    # static file serving
     static_docs_server = connect.static(__dirname)
     server.get /\/docs\/*/, (req,res,next) ->
       req.url = req.url.substr('/docs'.length)
       static_docs_server(req,res,next)
 
-
+    # 지역 번호 알림
     server.get '/cortar/:cortarNo/:index', (req,res,next) ->
       cortarNo = req.params.cortarNo
       index = req.params.index
@@ -217,24 +273,56 @@ switch process.argv[2]
         res.send 'invalid arguments'
         next()
 
+    # 아파트 query
     server.get '/apt/:cortarNo', (req,res,next) ->
       cortarNo = req.params.cortarNo
       if (cortarNo == undefined)
         res.send 'invalid arguments'
         next()
       else
-        test
-          rletTypeCd : '아파트'
-          cortarNo : cortarNo,
-          (h) ->
-            result = []
-            for k in Object.keys(h).sort()
-              result.push
-                name : k
-                data : h[k].dump()
-            res.send(result)
-            next()
+        if cache[cortarNo]
+          res.send(cache[cortarNo])
+          next()
+        else
+          ticket = tickets.find(req.query.ticket)
+          if (!ticket)
+            ticket = ticket.create()
+          ticket.ref()
 
-    port = 8081
+          test ticket,
+            rletTypeCd : '아파트'
+            cortarNo : cortarNo,
+            (h) ->
+              result = []
+              for k in Object.keys(h).sort()
+                result.push
+                  name : k
+                  data : h[k].dump()
+
+              if not ticket.pendingKill
+                cache[cortarNo] = result
+
+              ticket.unref()
+
+              res.send(result)
+              next()
+
+
+    server.post '/ticket', (req,res,next) ->
+      res.send 201, {ticket:tickets.create().id}
+      next()
+    server.del '/ticket/:id', (req,res,next) ->
+      (tickets.find req.params.id)?.kill()
+      res.send 204
+      next()
+    server.get '/ticket-stat/:id', (req,res,next) ->
+      res.send (tickets.find req.params.id)?.stat
+      next()
+
+    # for c9.io support
+    port = process.env.PORT
+    host = process.env.HOST
+    port ?= 8081
+
     console.log "시작합니다! @#{port} listening!"
-    server.listen port
+    server.listen port, host

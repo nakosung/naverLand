@@ -15,35 +15,35 @@
 </div>
 <div class="modal hide fade" id="modal-dialog">
     <div class="modal-header">
-        <a href="#" class="close">x</a>
-        <h2>열심히 찾고 있어요!</h2>
+        <a href="#" class="close" ng-click="cancel()">x</a>
+        <h2>열심히 찾고 있어요!<small class="pull-right"><div>{{stat.articles}}건을 찾았습니다.</div><div>{{stat.workers}}개의 일꾼이 도와줍니다!</div></small></h2>
     </div>
     <div class="modal-body center" style="text-align: center;">
         <img src="http://www.drivetravel.com/images/searching.gif" alt="loading">
     </div>
-    <div class="modal-footer"></div>
+    <div class="modal-footer"><p>&copy;쿵이네 2012</p></div>
 </div>
 <div class="container">
     <div class="hero-unit">
-        <h2>내 입맛에 맞는 부동산은?</h2>
-        <p>부동산 매물을 합리적으로 비교 분석하여 즐겁게 삽시다!</p>
+        <h2>쿵이네 부동산</h2>
+        <p>부동산 매물을 합리적으로 비교 분석하여 즐거운 생활을!</p>
         <p>
-
-        <select class="" ng-model="l1" ng-options="x.value as x.name for x in loc1"></select>
-        <select ng-model="l2" ng-options="x.value as x.name for x in loc2"></select>
-        <select ng-model="l3" ng-options="x.value as x.name for x in loc3"></select>
-        <form class="form-search">
-            <div class="input-append">
-                <input type="text" class="span2 search-query" ng-model='cortarNo' ng-disabled="processing">
-                <button type="submit" class="btn btn-primary" ng-click="fetch()" ng-disabled="processing">뭐가 있나요?</button>
-            </div>
-        </form>
+            <select class="input-medium" ng-model="l1" ng-options="x.value as x.name for x in loc1"></select>
+            <select class="input-medium" ng-model="l2" ng-options="x.value as x.name for x in loc2"></select>
+            <select class="input-medium" ng-model="l3" ng-options="x.value as x.name for x in loc3"></select>
+            <form class="form-search">
+                <button type="submit" class="btn btn-danger btn-large" ng-click="fetch()" ng-disabled="processing"><strong>찾아주세요!</strong></button>
+                <input type="checkbox" ng-model="A1">매매</input>
+                <input type="checkbox" ng-model="B1">전세</input>
+                <input type="checkbox" ng-model="B2">월세</input>
+                <select class="input-small" ng-model="sortColumn" ng-options="x.value as x.name for x in [{name:'이름',value:'name'},{name:'크기',value:'size'},{name:'수익률',value:'rentalInterest'}]"></select>
+            </form>
         </p>
     </div>
 
     <div class="row" ng-show="data != undefined">
-        <div class="span4">
-            <h2>결과입니다!</h2>
+        <div class="span24">
+            <h2>{{name(l1,loc1)}} {{name(l2,loc2)}} {{name(l3,loc3)}} 결과입니다!</h2>
             <table class="table table-hover">
                 <thead>
                 <th>
@@ -56,14 +56,14 @@
                 </th>
                 </thead>
                 <tbody>
-                <tr ng-repeat="x in data">
-                    <td>{{x.data.name}}</td>
-                    <td>{{x.data.size}}</td>
-                    <td>{{x.data.A1 | number}}</td>
-                    <td>{{x.data.B1 | number}}</td>
-                    <td>{{x.data.B2[0] | number}}</td>
-                    <td>{{x.data.B2[1] | number}}</td>
-                    <td ng-show="x.data.rentalInterest">{{(x.data.rentalInterest*100).toFixed(2)}}%</td>
+                <tr ng-repeat="x in filteredData() | orderBy:sortColumn">
+                    <td>{{x.name}}</td>
+                    <td>{{x.size}}</td>
+                    <td>{{x.A1 | number}}</td>
+                    <td>{{x.B1 | number}}</td>
+                    <td>{{x.B2[0] | number}}</td>
+                    <td>{{x.B2[1] | number}}</td>
+                    <td ng-show="x.rentalInterest">{{(x.rentalInterest*100).toFixed(2)}}%</td>
                 </tr>
                 </tbody>
             </table>
@@ -80,11 +80,29 @@
 </footer>
 
 <script type="text/javascript">
-    function NaverLandCtrl($scope,$http) {
+    function NaverLandCtrl($scope,$http,$timeout) {
         $scope.cortarNo = 1171010900
         $scope.loc1 = []
         $scope.loc2 = []
         $scope.loc3 = []
+
+        $scope.sortColumn = 'name'
+
+        $scope.filteredData = function() {
+            return $scope.data.map(function(x){return x.data}).filter(function(x){
+                return ($scope.A1 && x.A1 || !$scope.A1) &&
+                        ($scope.B1 && x.B1 || !$scope.B1) &&
+                        ($scope.B2 && x.B2 || !$scope.B2)
+            })
+        }
+
+        $scope.name = function(l,loc) {
+            for (var i in loc) {
+                if (loc[i].value == l) {
+                    return loc[i].name
+                }
+            }
+        }
 
         $http.get('/cortar/1100000000/1')
                 .success(function(data){
@@ -110,6 +128,9 @@
         $scope.$watch('l3',function(){
             $scope.cortarNo = $scope.l3
         })
+        $scope.$watch('cortarNo',function(){
+            $scope.data = undefined;
+        })
         $scope.uri = function() {
             return '/apt/' + $scope.cortarNo
         }
@@ -119,13 +140,36 @@
             $('#modal-dialog').modal('show')
             $scope.processing = true
             $scope.data = undefined
-            $http.get($scope.uri())
+            $scope.ticket = undefined
+            $http.post('/ticket')
                     .success(function(data){
-                        console.log(data);
-                        $scope.processing = false
-                        $scope.data = data
-                        $('#modal-dialog').modal('hide')
+                        $scope.ticket = data.ticket;
+                        $timeout(function stat(){
+                            if ($scope.ticket != data.ticket) return;
+
+                            $http.get('/ticket-stat/'+data.ticket)
+                                    .success(function(data){
+                                        $scope.stat = data
+                                    })
+                            $timeout(stat,250)
+                        }, 250);
+                        $http.get($scope.uri() + "?ticket="+$scope.ticket)
+                                .success(function(data){
+                                    $scope.ticket = undefined;
+                                    console.log(data);
+                                    $scope.processing = false
+                                    $scope.data = data
+                                    $('#modal-dialog').modal('hide')
+                                })
+                                .error(function(data){
+                                    console.log(data);
+                                })
                     })
+        }
+        $scope.cancel = function() {
+            if ($scope.ticket != undefined) {
+                $http.delete('/ticket/'+$scope.ticket);
+            }
         }
     }
 </script>
