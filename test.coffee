@@ -1,8 +1,7 @@
 request = require 'request'
 cheerio = require 'cheerio'
-xml2json = require 'xml2json'
 restify = require 'restify'
-connect = require('connect')
+connect = require 'connect'
 
 naverApiUri = (cortarNo) ->
   uri = "http://land.naver.com/article/"
